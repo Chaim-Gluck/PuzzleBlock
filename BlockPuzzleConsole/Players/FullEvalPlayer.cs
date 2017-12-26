@@ -110,7 +110,7 @@ namespace PuzzleBlock.Players
     {
         public override GamePath SelectBestPath(List<GamePath> paths)
         {
-            var topScorePath = from x in paths orderby x.ScoreGain descending, x.CellCount descending, x.PlacementScore select x;
+            var topScorePath = from x in paths orderby x.ScoreGain descending, x.PlacementScore descending select x;
 
             return topScorePath.First();
         }
@@ -125,8 +125,197 @@ namespace PuzzleBlock.Players
             gamePath.CellsGain += cellsGain;
             gamePath.ScoreGain += scoreGain;
             gamePath.CellCount = newBoard.CellCount();
-            gamePath.PlacementScore *= candidate.PlacementScore;
+            gamePath.PlacementScore = BoardScore(newBoard);
         }
+
+        //private float BoardScoreByNextStep(Board newBoard)
+        //{
+        //    var score = 1f;
+        //    var FiveLinerE = new Shape(Shape.Type.FiveLiner, Shape.ShapeOrientation.E);
+        //    var FiveLinerN = new Shape(Shape.Type.FiveLiner, Shape.ShapeOrientation.N);
+        //    var FourLinerE = new Shape(Shape.Type.FourLiner, Shape.ShapeOrientation.E);
+        //    var FourLinerN = new Shape(Shape.Type.FourLiner, Shape.ShapeOrientation.N);
+        //    var LargeSquare = new Shape(Shape.Type.LargeSquare, Shape.ShapeOrientation.N);
+
+        //    if (!newBoard.CanFitAnywhere(FiveLinerE))
+        //        score *= 0.9f;
+        //    if (!newBoard.CanFitAnywhere(FiveLinerN))
+        //        score *= 0.9f;
+        //    if (!newBoard.CanFitAnywhere(FourLinerE))
+        //        score *= 0.9f;
+        //    if (!newBoard.CanFitAnywhere(FourLinerN))
+        //        score *= 0.9f;
+        //    if (!newBoard.CanFitAnywhere(LargeSquare))
+        //        score *= 0.8f;
+
+        //    return score;
+        //}
+
+        private float BoardScore(Board newBoard)
+        {
+            float score = 1;
+
+            for (int x = 0; x < 8; x++)
+            {
+                for (int y = 0; y < 8; y++)
+                {
+                    if (!newBoard.Cells[x][y])
+                        continue;
+
+                    float mult1 = 0;
+                    float mult2 = 0;
+
+                    if (y == 0 || y == 7)
+                        mult1 = 1;
+                    if (y == 1 || y == 6)
+                        mult1 = 0.75F;
+                    if (y == 2 || y == 5)
+                        mult1 = 0.5F;
+                    if (y == 3 || y == 4)
+                        mult1 = 0.25F;
+
+                    if (x == 0 || x == 7)
+                        mult2 = 1;
+                    if (x == 1 || x == 6)
+                        mult2 = 0.75F;
+                    if (x == 2 || x == 5)
+                        mult2 = 0.5F;
+                    if (x == 3 || x == 4)
+                        mult2 = 0.25F;
+
+                    score *= mult1 * mult2;
+                }
+            }
+            return score;
+        }
+
+        //private float BoardScoreWithWeight(Board newBoard)
+        //{
+        //    float score = 1;
+
+        //    var BestX = FindMostWeightX(newBoard);
+        //    var BestY = FindMostWeightY(newBoard);
+
+        //    for (int x = 0; x < 8; x++)
+        //    {
+        //        for (int y = 0; y < 8; y++)
+        //        {
+        //            if (!newBoard.Cells[x][y])
+        //                continue;
+
+        //            var offFromBestY = Math.Abs(y - BestY);
+        //            var offFromBestX = Math.Abs(x - BestX);
+
+        //            float mult1 = 0;
+        //            float mult2 = 0;
+
+        //            if (offFromBestY == 0)
+        //                mult1 = 1;
+        //            if (offFromBestY == 1)
+        //                mult1 = 0.875F;
+        //            if (offFromBestY == 2)
+        //                mult1 = 0.75F;
+        //            if (offFromBestY == 3)
+        //                mult1 = 0.625F;
+        //            if (offFromBestY == 4)
+        //                mult1 = 0.5F;
+        //            if (offFromBestY == 5)
+        //                mult1 = 0.375F;
+        //            if (offFromBestY == 6)
+        //                mult1 = 0.25F;
+        //            if (offFromBestY == 7)
+        //                mult1 = 0.25F;
+
+        //            if (offFromBestX == 0)
+        //                mult2 = 1;
+        //            if (offFromBestX == 1)
+        //                mult2 = 0.875F;
+        //            if (offFromBestX == 2)
+        //                mult2 = 0.75F;
+        //            if (offFromBestX == 3)
+        //                mult2 = 0.625F;
+        //            if (offFromBestX == 4)
+        //                mult2 = 0.5F;
+        //            if (offFromBestX == 5)
+        //                mult2 = 0.375F;
+        //            if (offFromBestX == 6)
+        //                mult2 = 0.25F;
+        //            if (offFromBestX == 7)
+        //                mult2 = 0.25F;
+
+        //            score *= mult1 * mult2;
+        //        }
+        //    }
+        //    return score;
+        //}
+
+        //private int FindMostWeightY(Board newBoard)
+        //{
+        //    int bestY = 0;
+        //    int bestSum = 0;
+
+        //    int tempSum = 0;
+        //    for (int x = 0; x < 8; x++)
+        //    {
+        //        for (int y = 0; y < 4; y++)
+        //        {
+        //            if (!newBoard.Cells[x][y])
+        //                continue;
+
+        //            tempSum++;
+        //        }
+        //    }
+        //    bestSum = tempSum;
+
+        //    tempSum = 0;
+        //    for (int x = 0; x < 8; x++)
+        //    {
+        //        for (int y = 4; y < 8; y++)
+        //        {
+        //            if (!newBoard.Cells[x][y])
+        //                continue;
+
+        //            tempSum++;
+        //        }
+        //    }
+
+        //    bestY = bestSum >= tempSum ? 0 : 7;
+        //    return bestY;
+        //}
+
+        //private int FindMostWeightX(Board newBoard)
+        //{
+        //    int bestX = 0;
+        //    int bestSum = 0;
+
+        //    int tempSum = 0;
+        //    for (int x = 0; x < 4; x++)
+        //    {
+        //        for (int y = 0; y < 8; y++)
+        //        {
+        //            if (!newBoard.Cells[x][y])
+        //                continue;
+
+        //            tempSum++;
+        //        }
+        //    }
+        //    bestSum = tempSum;
+
+        //    tempSum = 0;
+        //    for (int x = 4; x < 8; x++)
+        //    {
+        //        for (int y = 0; y < 8; y++)
+        //        {
+        //            if (!newBoard.Cells[x][y])
+        //                continue;
+
+        //            tempSum++;
+        //        }
+        //    }
+
+        //    bestX = bestSum >= tempSum ? 0 : 7;
+        //    return bestX;
+        //}
 
         public override void GatherPathStats(GamePath gamePath, Board board)
         {
