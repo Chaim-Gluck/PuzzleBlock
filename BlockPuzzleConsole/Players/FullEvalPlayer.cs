@@ -60,6 +60,7 @@ namespace PuzzleBlock.Players
             {
                 gamePaths.Add(startGamePath);
                 GatherPathStats(startGamePath, board);
+                return;
             }
 
             var placed = false;
@@ -108,11 +109,21 @@ namespace PuzzleBlock.Players
 
     class FullEvalPlayer : FullEvalPlayerBase
     {
+        private IList<IDictionary<int, Shape>> AllNextShaps = null;
         public override GamePath SelectBestPath(List<GamePath> paths)
-        {
-            var topScorePath = from x in paths orderby x.ScoreGain descending, x.PlacementScore descending select x;
+        {            
+            var topScorePath = from x in paths orderby x.Moves.Count descending, x.ScoreGain descending, x.PlacementScore descending select x;
+            var topScorePathByNextDraw3 = from x in paths orderby x.Moves.Count descending, x.PlacementScore descending, x.ScoreGain descending select x;
 
-            return topScorePath.First();
+            var topPath = topScorePath.First();
+            var topPathByNextDraw3 = topScorePathByNextDraw3.First();
+
+            if (topPath.CellCount < 30 || topPath.MaxArea >= 0.35f)
+                return topPath;
+            if (topPathByNextDraw3.PlacementScore == 0)
+                return topPath;
+
+                return topPathByNextDraw3;
         }
 
         public override void GatherStepStats(Candidate candidate, GamePath gamePath, Board board, Board newBoard)
@@ -125,31 +136,18 @@ namespace PuzzleBlock.Players
             gamePath.CellsGain += cellsGain;
             gamePath.ScoreGain += scoreGain;
             gamePath.CellCount = newBoard.CellCount();
-            gamePath.PlacementScore = BoardScore(newBoard);
         }
 
-        //private float BoardScoreByNextStep(Board newBoard)
-        //{
-        //    var score = 1f;
-        //    var FiveLinerE = new Shape(Shape.Type.FiveLiner, Shape.ShapeOrientation.E);
-        //    var FiveLinerN = new Shape(Shape.Type.FiveLiner, Shape.ShapeOrientation.N);
-        //    var FourLinerE = new Shape(Shape.Type.FourLiner, Shape.ShapeOrientation.E);
-        //    var FourLinerN = new Shape(Shape.Type.FourLiner, Shape.ShapeOrientation.N);
-        //    var LargeSquare = new Shape(Shape.Type.LargeSquare, Shape.ShapeOrientation.N);
+        public override void GatherPathStats(GamePath gamePath, Board board)
+        {
+            gamePath.MaxArea = (float)MaxArea.MaximalRectangle(board.Cells) / 64;
+            gamePath.FragScore = Fragmentation.GetFragmentationScore(board.Cells);
 
-        //    if (!newBoard.CanFitAnywhere(FiveLinerE))
-        //        score *= 0.9f;
-        //    if (!newBoard.CanFitAnywhere(FiveLinerN))
-        //        score *= 0.9f;
-        //    if (!newBoard.CanFitAnywhere(FourLinerE))
-        //        score *= 0.9f;
-        //    if (!newBoard.CanFitAnywhere(FourLinerN))
-        //        score *= 0.9f;
-        //    if (!newBoard.CanFitAnywhere(LargeSquare))
-        //        score *= 0.8f;
-
-        //    return score;
-        //}
+            if (gamePath.CellCount < 30 || gamePath.MaxArea >= 0.35f)
+                gamePath.PlacementScore = BoardScore(board);
+            else
+                gamePath.PlacementScore = BoardScoreByNextDraw3(board);
+        }
 
         private float BoardScore(Board newBoard)
         {
@@ -188,6 +186,168 @@ namespace PuzzleBlock.Players
             }
             return score;
         }
+
+        private float BoardScoreByNextDraw3(Board newBoard)
+        {
+            if(AllNextShaps == null)
+                AllNextShaps = CreateAllNextShaps();
+
+            int max = AllNextShaps.Count;
+
+            foreach (var shapes in AllNextShaps)
+            {
+                foreach (Shape shape in shapes.Values)
+                {
+                    if (shape.ShapeType == Shape.Type.LargeSquare)
+                        max += 3;
+                    if (shape.ShapeType == Shape.Type.FiveLiner)
+                        max += 2;
+                }
+            }
+
+            int count = 0;
+            foreach (var shapes in AllNextShaps)
+            {
+                if (CanPlaceAllShapes(newBoard, shapes))
+                {
+                    count++;
+                    foreach (Shape shape in shapes.Values)
+                    {
+                        if (shape.ShapeType == Shape.Type.LargeSquare)
+                            count += 3;
+                        if (shape.ShapeType == Shape.Type.FiveLiner)
+                            count += 2;
+                    }
+                }
+            }
+
+            return (float) Math.Round((double)count / max, 3);
+        }
+
+        private bool CanPlaceAllShapes(Board newBoard, IDictionary<int, Shape> shapes)
+        {
+            var gamePaths = new List<GamePath>();
+            TryMakeNextDraw3(newBoard, shapes, gamePaths, null);
+            return gamePaths.Count > 0;
+        }
+
+        private void TryMakeNextDraw3(Board board, IDictionary<int, Shape> shapes,
+            IList<GamePath> gamePaths, GamePath startGamePath)
+        {
+            if (shapes.Count == 0)
+            {
+                gamePaths.Add(startGamePath);
+                return;
+            }
+
+            foreach (var shape in shapes)
+            {
+                for (int x = 0; x < 8 && gamePaths.Count == 0; x++)
+                {
+                    for (int y = 0; y < 8 && gamePaths.Count == 0; y++)
+                    {
+                        var curPlacement = "" + (char)(97 + x) + (char)(49 + y);
+                        var newBoard = new Board(board);
+                        if (newBoard.TryPlace(shape.Value, curPlacement))
+                        {
+                            var gamePath = new GamePath(startGamePath);
+
+                            var candidate = new Candidate()
+                            {
+                                ShapeId = shape.Key,
+                                Placement = curPlacement,
+                            };
+                            gamePath.Moves.Add(candidate);
+                            
+
+                            var newShapes = new Dictionary<int, Shape>();
+                            foreach (var sh in shapes)
+                                if (sh.Key != shape.Key)
+                                    newShapes.Add(sh.Key, sh.Value);
+
+                            TryMakeNextDraw3(newBoard, newShapes, gamePaths, gamePath);
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        ///     Create all combinations of next 3 shapes using the "angry" shapes
+        /// </summary>
+        /// <returns></returns>
+        private IList<IDictionary<int, Shape>> CreateAllNextShaps()
+        {
+            IList<IDictionary<int, Shape>> AllNextShapes = new List<IDictionary<int, Shape>>();
+            IDictionary<int, Shape> Allshapes = CreateAllShapes();
+            int max = Allshapes.Count;
+
+            for (int i = 0; i < max; i++)
+            {
+                for (int j = i+1; j < max; j++)
+                {
+                    for (int k = j+1; k < max; k++)
+                    {
+                        AllNextShapes.Add(new Dictionary<int, Shape>() { {1, Allshapes[i] }, {2, Allshapes[j] }, {3, Allshapes[k] } });
+                    }
+                }
+            }
+
+            return AllNextShapes;
+        }
+
+        /// <summary>
+        ///     Create all "angry" shapes meaning the shapes that are most likeley to cause problems
+        /// </summary>
+        /// <returns></returns>
+        private IDictionary<int, Shape> CreateAllShapes()
+        {
+            IDictionary<int, Shape> Allshapes = new Dictionary<int, Shape>();
+
+            var shapeVals = Enum.GetValues(typeof(Shape.Type));
+            var shapeOrientations = Enum.GetValues(typeof(Shape.ShapeOrientation));
+            int key = 0;
+            foreach (Shape.Type type in shapeVals)
+            {
+                if (type == Shape.Type.Singler || type == Shape.Type.ThreeLiner || type == Shape.Type.FourLiner ||
+                    type == Shape.Type.SmallL || type == Shape.Type.SmallSquare || type == Shape.Type.LongTail ||
+                    type == Shape.Type.LargeL)
+                    continue;
+                foreach (Shape.ShapeOrientation orientation in shapeOrientations)
+                {
+                    if (((type == Shape.Type.FiveLiner) && (orientation == Shape.ShapeOrientation.E || orientation == Shape.ShapeOrientation.N)) ||
+                        (type == Shape.Type.LargeSquare && orientation != Shape.ShapeOrientation.E))
+                        continue;
+                    Allshapes.Add(key, new Shape(type, orientation));
+                    key++;
+                }
+            }
+
+            return Allshapes;
+        }
+
+        //private float BoardScoreByNextStep(Board newBoard)
+        //{
+        //    var score = 1f;
+        //    var FiveLinerE = new Shape(Shape.Type.FiveLiner, Shape.ShapeOrientation.E);
+        //    var FiveLinerN = new Shape(Shape.Type.FiveLiner, Shape.ShapeOrientation.N);
+        //    var FourLinerE = new Shape(Shape.Type.FourLiner, Shape.ShapeOrientation.E);
+        //    var FourLinerN = new Shape(Shape.Type.FourLiner, Shape.ShapeOrientation.N);
+        //    var LargeSquare = new Shape(Shape.Type.LargeSquare, Shape.ShapeOrientation.N);
+
+        //    if (!newBoard.CanFitAnywhere(FiveLinerE))
+        //        score *= 0.9f;
+        //    if (!newBoard.CanFitAnywhere(FiveLinerN))
+        //        score *= 0.9f;
+        //    if (!newBoard.CanFitAnywhere(FourLinerE))
+        //        score *= 0.9f;
+        //    if (!newBoard.CanFitAnywhere(FourLinerN))
+        //        score *= 0.9f;
+        //    if (!newBoard.CanFitAnywhere(LargeSquare))
+        //        score *= 0.8f;
+
+        //    return score;
+        //}
 
         //private float BoardScoreWithWeight(Board newBoard)
         //{
@@ -316,12 +476,6 @@ namespace PuzzleBlock.Players
         //    bestX = bestSum >= tempSum ? 0 : 7;
         //    return bestX;
         //}
-
-        public override void GatherPathStats(GamePath gamePath, Board board)
-        {
-            gamePath.MaxArea = (float)MaxArea.MaximalRectangle(board.Cells)/64;
-            gamePath.FragScore = Fragmentation.GetFragmentationScore(board.Cells);
-        }
     }
 
     class GamePath

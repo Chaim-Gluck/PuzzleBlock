@@ -9,7 +9,7 @@ namespace PuzzleBlock
         public enum Type { Singler, SmallL, LargeL, ThreeLiner, FourLiner, FiveLiner, LongTail, SmallSquare, LargeSquare }
         public enum ShapeOrientation { N, W, S, E }
 
-        private Type ShapeType { get; }
+        public Type ShapeType { get; }
         private ShapeOrientation Orientation { get; }
 
         public ConsoleColor Color { get; }
